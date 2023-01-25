@@ -54,6 +54,10 @@ type TransactionArgs struct {
 	ChainID    *hexutil.Big      `json:"chainId,omitempty"`
 }
 
+type CallsMany struct {
+	txes *[]TransactionArgs `json:"txes"`
+}
+
 // from retrieves the transaction sender address.
 func (args *TransactionArgs) from() common.Address {
 	if args.From == nil {

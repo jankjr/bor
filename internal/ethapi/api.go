@@ -982,7 +982,7 @@ func (diff *StateOverride) Apply(state *state.StateDB) error {
 	return nil
 }
 
-func DoCall2(ctx context.Context, b Backend, args1 TransactionArgs, args2 TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
+func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
 
 	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
@@ -1004,9 +1004,11 @@ func DoCall2(ctx context.Context, b Backend, args1 TransactionArgs, args2 Transa
 	// this makes sure resources are cleaned up.
 	defer cancel()
 
-	// Get a new instance of the EVM.
-	{
-		msg, err := args1.ToMessage(globalGasCap, header.BaseFee)
+	var out *core.ExecutionResult = nil
+
+	for i := range *args.txes {
+		args := (*args.txes)[i]
+		msg, err := args.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
 			return nil, err
 		}
@@ -1035,39 +1037,9 @@ func DoCall2(ctx context.Context, b Backend, args1 TransactionArgs, args2 Transa
 		if err != nil {
 			return result, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
+		out = result
 	}
-	{
-		msg, err := args2.ToMessage(globalGasCap, header.BaseFee)
-		if err != nil {
-			return nil, err
-		}
-		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
-		if err != nil {
-			return nil, err
-		}
-		// Wait for the context to be done and cancel the evm. Even if the
-		// EVM has finished, cancelling may be done (repeatedly)
-		go func() {
-			<-ctx.Done()
-			evm.Cancel()
-		}()
-
-		// Execute the message.
-		gp := new(core.GasPool).AddGas(math.MaxUint64)
-		result, err := core.ApplyMessage(evm, msg, gp)
-		if err := vmError(); err != nil {
-			return nil, err
-		}
-
-		// If the timer caused an abort, return an appropriate error message
-		if evm.Cancelled() {
-			return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
-		}
-		if err != nil {
-			return result, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
-		}
-		return result, nil
-	}
+	return out, nil
 }
 
 func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
