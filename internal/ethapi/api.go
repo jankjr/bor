@@ -1290,8 +1290,9 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
 
 	depResults := make([]*core.ExecutionResult, len(*args.DepTxes))
-	gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
+
 	for i, m := range *args.DepTxes {
+
 		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
 			return nil, nil, err
@@ -1302,6 +1303,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 
 		// Execute the message.
+		gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
 		result, err := core.ApplyMessage(evm, msg, gp)
 		depResults[i] = result
 		if err := vmError(); err != nil {
@@ -1319,7 +1321,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	results := make([]*core.ExecutionResult, len(*args.Txes))
 
 	for i, m := range *args.Txes {
-		gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
+
 		stateToUse := state.Copy()
 		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
@@ -1331,6 +1333,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 
 		// Execute the message.
+		gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
 		result, err := core.ApplyMessage(evm, msg, gp)
 		if err := vmError(); err != nil {
 			results[i] = nil
