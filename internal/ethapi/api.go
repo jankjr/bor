@@ -1231,6 +1231,7 @@ func (s *PublicBlockChainAPI) CallFanOut(ctx context.Context, args FanOut, block
 		}
 		ret := dep.Return()
 		err := dep.Revert()
+
 		depResultsOut[i] = FanoutResult{
 			Success: len(err) == 0,
 			Out:     hexutil.Encode(ret),
@@ -1295,7 +1296,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		gp := new(core.GasPool).AddGas(header.GasLimit)
 
 		header.GasUsed = 0
-		msg, err := m.ToMessage(gp.Gas(), header.BaseFee)
+		msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1329,10 +1330,10 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	header.GasUsed = 0
 
 	for i, m := range *args.Txes {
-		gp := new(core.GasPool).AddGas(header.GasLimit)
+		gp := new(core.GasPool).AddGas(header.GasLimit / 2)
 		header.GasUsed = 0
 		stateToUse := newRoot.Copy()
-		msg, err := m.ToMessage(gp.Gas(), header.BaseFee)
+		msg, err := m.ToMessage(gp.Gas()-gp.Gas()/10, header.BaseFee)
 		if err != nil {
 			return nil, nil, err
 		}
