@@ -1291,12 +1291,11 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
 
 	depResults := make([]*core.ExecutionResult, len(*args.DepTxes))
-
+	origGp := new(core.GasPool).AddGas(30000000)
 	for i, m := range *args.DepTxes {
-		gp := new(core.GasPool).AddGas(header.GasLimit)
 
 		header.GasUsed = 0
-		msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
+		msg, err := m.ToMessage(origGp.Gas(), header.BaseFee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1306,7 +1305,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 
 		// Execute the message.
-		result, err := core.ApplyMessage(evm, msg, gp)
+		result, err := core.ApplyMessage(evm, msg, origGp)
 
 		if err := vmError(); err != nil {
 			return nil, nil, err
@@ -1320,24 +1319,22 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 		depResults[i] = result
 	}
-
 	results := make([]*core.ExecutionResult, len(*args.Txes))
-
-	newRoot := state.Copy()
+	header.GasUsed = 0
 	if state.GetRefund() > 0 {
 		state.SubRefund(state.GetRefund())
 	}
-	header.GasUsed = 0
-
+	rev := state.Snapshot()
 	for i, m := range *args.Txes {
-		gp := new(core.GasPool).AddGas(header.GasLimit / 2)
-		header.GasUsed = 0
-		stateToUse := newRoot.Copy()
-		msg, err := m.ToMessage(gp.Gas()-gp.Gas()/10, header.BaseFee)
+		state.RevertToSnapshot(rev)
+		gp := new(core.GasPool).AddGas(origGp.Gas())
+		header.GasUsed = origGp.Gas()
+		msg, err := m.ToMessage(gp.Gas()-gp.Gas()/4, header.BaseFee)
 		if err != nil {
-			return nil, nil, err
+			results[i] = nil
+			continue
 		}
-		evm, vmError, err := b.GetEVM(ctx, msg, stateToUse, header, &vm.Config{NoBaseFee: true})
+		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
 		if err != nil {
 			results[i] = nil
 			continue
