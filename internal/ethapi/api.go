@@ -1293,11 +1293,11 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	depResults := make([]*core.ExecutionResult, len(*args.DepTxes))
 	results := make([]*core.ExecutionResult, len(*args.Txes))
 
-	origGp := new(core.GasPool).AddGas(30000000)
 	for i, m := range *args.DepTxes {
 
 		header.GasUsed = 0
-		msg, err := m.ToMessage(origGp.Gas(), header.BaseFee)
+		msg, err := m.ToMessage(uint64(*m.Gas), header.BaseFee)
+		gp := new(core.GasPool).AddGas(msg.Gas())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1307,8 +1307,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 
 		// Execute the message.
-		result, err := core.ApplyMessage(evm, msg, origGp)
-		state.Finalise(true)
+		result, err := core.ApplyMessage(evm, msg, gp)
 		if err := vmError(); err != nil {
 			return nil, nil, err
 		}
@@ -1320,23 +1319,20 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			return nil, nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
 		depResults[i] = result
-	}
-
-	if state.GetRefund() > 0 {
-		state.SubRefund(state.GetRefund())
+		state.Finalise(true)
 	}
 
 	// Execute the message.
-	ourState := state.Copy()
-	rev := ourState.Snapshot()
+
 	for i, m := range *args.Txes {
-		gp := new(core.GasPool).AddGas(origGp.Gas())
-		header.GasUsed = origGp.Gas()
-		msg, err := m.ToMessage(gp.Gas()-gp.Gas()/4, header.BaseFee)
+		header.GasUsed = 0
+		gp := new(core.GasPool).AddGas(header.GasLimit)
+		msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
 		if err != nil {
 			results[i] = nil
 			continue
 		}
+		ourState := state.Copy()
 		evm, vmError, err := b.GetEVM(ctx, msg, ourState, header, &vm.Config{NoBaseFee: true})
 		if err != nil {
 			results[i] = nil
@@ -1357,14 +1353,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			results[i] = nil
 			continue
 		}
-		if !ourState.RevertToSnapshotDontRevert(rev) {
-			ourState = state.Copy()
-			rev = ourState.Snapshot()
-			results[i] = nil
-			continue
-		}
 		results[i] = result
-
 	}
 
 	// Wait for the context to be done and cancel the evm. Even if the
