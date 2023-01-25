@@ -1006,6 +1006,8 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 
 	var out *core.ExecutionResult = nil
 
+	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
+
 	for _, args := range args.txes {
 		msg, err := args.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
@@ -1015,8 +1017,6 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 		if err != nil {
 			return nil, err
 		}
-		// Wait for the context to be done and cancel the evm. Even if the
-		// EVM has finished, cancelling may be done (repeatedly)
 		go func() {
 			<-ctx.Done()
 			evm.Cancel()
@@ -1025,6 +1025,7 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 		// Execute the message.
 		gp := new(core.GasPool).AddGas(math.MaxUint64)
 		result, err := core.ApplyMessage(evm, msg, gp)
+		out = result
 		if err := vmError(); err != nil {
 			return nil, err
 		}
@@ -1034,10 +1035,12 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 			return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
 		}
 		if err != nil {
-			return result, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
+			return nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
-		out = result
 	}
+	// Wait for the context to be done and cancel the evm. Even if the
+	// EVM has finished, cancelling may be done (repeatedly)
+
 	return out, nil
 }
 
