@@ -1008,7 +1008,7 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 
 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
 	gp := new(core.GasPool).AddGas(math.MaxUint64)
-	for i, m := range args.txes {
+	for _, m := range *args.Txes {
 		log.Info("m to msg")
 		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
@@ -1037,15 +1037,10 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 		if err != nil {
 			return nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
-
-		if i == len(args.txes)-1 {
-			log.Info("returning last result")
-			return result, nil
-		}
 	}
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
-	log.Info("huh?")
+	log.Info("out")
 	return out, nil
 }
 

@@ -54,8 +54,10 @@ type TransactionArgs struct {
 	ChainID    *hexutil.Big      `json:"chainId,omitempty"`
 }
 
+type TransactionArgsArr = []TransactionArgs
+
 type CallsMany struct {
-	txes []TransactionArgs `json:"txes"`
+	Txes *TransactionArgsArr `json:"txes"`
 }
 
 // from retrieves the transaction sender address.
