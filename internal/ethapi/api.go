@@ -1327,7 +1327,6 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	}
 	rev := state.Snapshot()
 	for i, m := range *args.Txes {
-		state.RevertToSnapshot(rev)
 		gp := new(core.GasPool).AddGas(origGp.Gas())
 		header.GasUsed = origGp.Gas()
 		msg, err := m.ToMessage(gp.Gas()-gp.Gas()/4, header.BaseFee)
@@ -1343,6 +1342,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 
 		// Execute the message.
 		result, err := core.ApplyMessage(evm, msg, gp)
+		state.RevertToSnapshot(rev)
 		if err := vmError(); err != nil {
 			results[i] = nil
 			continue
