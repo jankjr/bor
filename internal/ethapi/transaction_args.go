@@ -69,7 +69,7 @@ type FanoutResult struct {
 	Success bool   `json:"success"`
 	Out     string `json:"out"`
 	Error   string `json:"error"`
-	Gas     uint64 `json:"gas"`
+	Gas     string `json:"gas"`
 }
 
 type FanoutResultArr = []FanoutResult

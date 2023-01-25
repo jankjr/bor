@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1224,17 +1225,17 @@ func (s *PublicBlockChainAPI) CallFanOut(ctx context.Context, args FanOut, block
 				Success: false,
 				Out:     "0x0",
 				Error:   "0x0",
-				Gas:     0,
+				Gas:     " 0",
 			}
 			continue
 		}
 		ret := dep.Return()
 		err := dep.Revert()
 		depResultsOut[i] = FanoutResult{
-			Success: len(dep.Revert()) > 0,
+			Success: len(err) == 0,
 			Out:     hexutil.Encode(ret),
 			Error:   hexutil.Encode(err),
-			Gas:     dep.UsedGas,
+			Gas:     strconv.FormatUint(dep.UsedGas, 10),
 		}
 	}
 	for i, res := range results {
@@ -1243,17 +1244,17 @@ func (s *PublicBlockChainAPI) CallFanOut(ctx context.Context, args FanOut, block
 				Success: false,
 				Out:     "0x0",
 				Error:   "0x0",
-				Gas:     0,
+				Gas:     "0",
 			}
 			continue
 		}
 		ret := res.Return()
 		err := res.Revert()
 		resultsOut[i] = FanoutResult{
-			Success: len(res.Revert()) > 0,
+			Success: len(err) == 0,
 			Out:     hexutil.Encode(ret),
 			Error:   hexutil.Encode(err),
-			Gas:     res.UsedGas,
+			Gas:     strconv.FormatUint(res.UsedGas, 10),
 		}
 	}
 	// If the result contains a revert reason, try to unpack and return it.
