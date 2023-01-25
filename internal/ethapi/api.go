@@ -1006,7 +1006,7 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 
 	var out *core.ExecutionResult = nil
 
-	for i, args := range args.txes {
+	for _, args := range args.txes {
 		msg, err := args.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
 			return nil, err
