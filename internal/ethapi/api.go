@@ -1007,25 +1007,29 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 	var out *core.ExecutionResult = nil
 
 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
-
-	for _, args := range args.txes {
-		msg, err := args.ToMessage(globalGasCap, header.BaseFee)
+	gp := new(core.GasPool).AddGas(math.MaxUint64)
+	for i, m := range args.txes {
+		log.Info("m to msg")
+		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
 		if err != nil {
 			return nil, err
 		}
+		log.Info("getting evm")
 		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
 		if err != nil {
 			return nil, err
 		}
 
 		// Execute the message.
-		gp := new(core.GasPool).AddGas(math.MaxUint64)
+
+		log.Info("applying tx")
 		result, err := core.ApplyMessage(evm, msg, gp)
 		out = result
 		if err := vmError(); err != nil {
 			return nil, err
 		}
 
+		log.Info("Checking errrs")
 		// If the timer caused an abort, return an appropriate error message
 		if evm.Cancelled() {
 			return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
@@ -1033,10 +1037,15 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 		if err != nil {
 			return nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
+
+		if i == len(args.txes)-1 {
+			log.Info("returning last result")
+			return result, nil
+		}
 	}
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
-
+	log.Info("huh?")
 	return out, nil
 }
 
@@ -1148,6 +1157,7 @@ func (s *PublicBlockChainAPI) Call2(ctx context.Context, args CallsMany, blockNr
 	if err != nil {
 		return nil, err
 	}
+	log.Info("got result")
 	// If the result contains a revert reason, try to unpack and return it.
 	if len(result.Revert()) > 0 {
 		return nil, newRevertError(result)
