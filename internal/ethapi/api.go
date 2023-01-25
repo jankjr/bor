@@ -1294,13 +1294,11 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	results := make([]*core.ExecutionResult, len(*args.Txes))
 
 	for i, m := range *args.DepTxes {
-
-		header.GasUsed = 0
-		msg, err := m.ToMessage(uint64(*m.Gas), header.BaseFee)
-		gp := new(core.GasPool).AddGas(msg.Gas())
+		msg, err := m.ToMessage(header.GasLimit, header.BaseFee)
 		if err != nil {
 			return nil, nil, err
 		}
+		gp := new(core.GasPool).AddGas(msg.Gas())
 		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
 		if err != nil {
 			return nil, nil, err
