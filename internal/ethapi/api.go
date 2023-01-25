@@ -1327,7 +1327,8 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	}
 
 	// Execute the message.
-	rev := state.Snapshot()
+	ourState := state.Copy()
+	rev := ourState.Snapshot()
 	for i, m := range *args.Txes {
 		gp := new(core.GasPool).AddGas(origGp.Gas())
 		header.GasUsed = origGp.Gas()
@@ -1336,7 +1337,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			results[i] = nil
 			continue
 		}
-		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+		evm, vmError, err := b.GetEVM(ctx, msg, ourState, header, &vm.Config{NoBaseFee: true})
 		if err != nil {
 			results[i] = nil
 			continue
@@ -1356,8 +1357,14 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			results[i] = nil
 			continue
 		}
-		state.RevertToSnapshot(rev)
+		if !ourState.RevertToSnapshotDontRevert(rev) {
+			ourState = state.Copy()
+			rev = ourState.Snapshot()
+			results[i] = nil
+			continue
+		}
 		results[i] = result
+
 	}
 
 	// Wait for the context to be done and cancel the evm. Even if the
