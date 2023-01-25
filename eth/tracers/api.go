@@ -1016,6 +1016,57 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
 }
 
+// func (api *API) Trace2(ctx context.Context, dependency ethapi.TransactionArgs, main ethapi.TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, config *TraceCallConfig) (interface{}, error) {
+// 	// Try to retrieve the specified block
+// 	var (
+// 		err   error
+// 		block *types.Block
+// 	)
+// 	if hash, ok := blockNrOrHash.Hash(); ok {
+// 		block, err = api.blockByHash(ctx, hash)
+// 	} else if number, ok := blockNrOrHash.Number(); ok {
+// 		block, err = api.blockByNumber(ctx, number)
+// 	} else {
+// 		return nil, errors.New("invalid arguments; neither block nor hash specified")
+// 	}
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// try to recompute the state
+// 	reexec := defaultTraceReexec
+// 	if config != nil && config.Reexec != nil {
+// 		reexec = *config.Reexec
+// 	}
+// 	statedb, err := api.backend.StateAtBlock(ctx, block, reexec, nil, true, false)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// Apply the customized state rules if required.
+// 	if config != nil {
+// 		if err := config.StateOverrides.Apply(statedb); err != nil {
+// 			return nil, err
+// 		}
+// 	}
+
+// 	// Execute the trace
+// 	vmctx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
+
+// 	msg, err := dependency.ToMessage(api.backend.RPCGasCap(), block.BaseFee())
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	txctx := &Context{
+// 		BlockHash: block.Hash(),
+// 		TxIndex:   0,
+// 		TxHash:    msg.To().Hash(),
+// 	}
+
+// 	res, err = api.traceTx(ctx, msg, txctx, vmctx, statedb, nil)
+
+// 	{}
+
+// }
+
 // TraceCall lets you trace a given eth_call. It collects the structured logs
 // created during the execution of EVM if the given transaction was added on
 // top of the provided block and returns them as a JSON object.
