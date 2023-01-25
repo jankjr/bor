@@ -1291,6 +1291,8 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
 
 	depResults := make([]*core.ExecutionResult, len(*args.DepTxes))
+	results := make([]*core.ExecutionResult, len(*args.Txes))
+
 	origGp := new(core.GasPool).AddGas(30000000)
 	for i, m := range *args.DepTxes {
 
@@ -1319,8 +1321,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 		depResults[i] = result
 	}
-	results := make([]*core.ExecutionResult, len(*args.Txes))
-	header.GasUsed = 0
+
 	if state.GetRefund() > 0 {
 		state.SubRefund(state.GetRefund())
 	}
