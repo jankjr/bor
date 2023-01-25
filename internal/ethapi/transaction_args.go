@@ -60,6 +60,24 @@ type CallsMany struct {
 	Txes *TransactionArgsArr `json:"txes"`
 }
 
+type FanOut struct {
+	DepTxes *TransactionArgsArr `json:"depsTxes"`
+	Txes    *TransactionArgsArr `json:"txes"`
+}
+
+type FanoutResult struct {
+	Success bool   `json:"success"`
+	Out     string `json:"out"`
+	Error   string `json:"error"`
+	Gas     uint64 `json:"gas"`
+}
+
+type FanoutResultArr = []FanoutResult
+type FanOutResp struct {
+	DepTxes *FanoutResultArr `json:"depsTxes"`
+	Txes    *FanoutResultArr `json:"txes"`
+}
+
 // from retrieves the transaction sender address.
 func (args *TransactionArgs) from() common.Address {
 	if args.From == nil {

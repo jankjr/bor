@@ -1210,12 +1210,152 @@ func (s *PublicBlockChainAPI) CallGetLogs(ctx context.Context, args TransactionA
 	return out, result.Err
 }
 
+func (s *PublicBlockChainAPI) CallFanOut(ctx context.Context, args FanOut, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (*FanOutResp, error) {
+	depResults, results, err := DoFanOut(ctx, s.b, args, blockNrOrHash, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
+	if err != nil {
+		return nil, err
+	}
+
+	depResultsOut := make([]FanoutResult, len(depResults))
+	resultsOut := make([]FanoutResult, len(results))
+	for i, dep := range depResults {
+		if dep == nil {
+			depResultsOut[i] = FanoutResult{
+				Success: false,
+				Out:     "0x0",
+				Error:   "0x0",
+				Gas:     0,
+			}
+			continue
+		}
+		ret := dep.Return()
+		err := dep.Revert()
+		depResultsOut[i] = FanoutResult{
+			Success: len(dep.Revert()) > 0,
+			Out:     hexutil.Encode(ret),
+			Error:   hexutil.Encode(err),
+			Gas:     dep.UsedGas,
+		}
+	}
+	for i, res := range results {
+		if res == nil {
+			resultsOut[i] = FanoutResult{
+				Success: false,
+				Out:     "0x0",
+				Error:   "0x0",
+				Gas:     0,
+			}
+			continue
+		}
+		ret := res.Return()
+		err := res.Revert()
+		resultsOut[i] = FanoutResult{
+			Success: len(res.Revert()) > 0,
+			Out:     hexutil.Encode(ret),
+			Error:   hexutil.Encode(err),
+			Gas:     res.UsedGas,
+		}
+	}
+	// If the result contains a revert reason, try to unpack and return it.
+
+	return &FanOutResp{
+		DepTxes: &depResultsOut,
+		Txes:    &resultsOut,
+	}, nil
+}
+
+func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, timeout time.Duration, globalGasCap uint64) ([]*core.ExecutionResult, []*core.ExecutionResult, error) {
+	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
+
+	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return nil, nil, err
+	}
+	if err := overrides.Apply(state); err != nil {
+		return nil, nil, err
+	}
+	// Setup context so it may be cancelled the call has completed
+	// or, in case of unmetered gas, setup a context with a timeout.
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	// Make sure the context is cancelled when the call has completed
+	// this makes sure resources are cleaned up.
+	defer cancel()
+
+	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
+
+	depResults := make([]*core.ExecutionResult, len(*args.DepTxes))
+	gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
+	for i, m := range *args.DepTxes {
+		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
+		if err != nil {
+			return nil, nil, err
+		}
+		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Execute the message.
+		result, err := core.ApplyMessage(evm, msg, gp)
+		depResults[i] = result
+		if err := vmError(); err != nil {
+			return nil, nil, err
+		}
+		// If the timer caused an abort, return an appropriate error message
+		if evm.Cancelled() {
+			return nil, nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
+		}
+	}
+
+	results := make([]*core.ExecutionResult, len(*args.Txes))
+
+	for i, m := range *args.Txes {
+		gp := new(core.GasPool).AddGas(b.CurrentHeader().GasLimit)
+		stateToUse := state.Copy()
+		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
+		if err != nil {
+			return nil, nil, err
+		}
+		evm, vmError, err := b.GetEVM(ctx, msg, stateToUse, header, &vm.Config{NoBaseFee: true})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Execute the message.
+		result, err := core.ApplyMessage(evm, msg, gp)
+		if err := vmError(); err != nil {
+			results[i] = nil
+			continue
+		}
+		if evm.Cancelled() {
+			results[i] = nil
+			continue
+		}
+		if err != nil {
+			results[i] = nil
+			continue
+		}
+		results[i] = result
+	}
+
+	// Wait for the context to be done and cancel the evm. Even if the
+	// EVM has finished, cancelling may be done (repeatedly)
+	return depResults, results, nil
+}
+
 func (s *PublicBlockChainAPI) Call2(ctx context.Context, args CallsMany, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
 	result, err := DoCall2(ctx, s.b, args, blockNrOrHash, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
 	if err != nil {
 		return nil, err
 	}
-	log.Info("got result")
 	// If the result contains a revert reason, try to unpack and return it.
 	if len(result.Revert()) > 0 {
 		return nil, newRevertError(result)
