@@ -71,6 +71,10 @@ type Receipt struct {
 	TransactionIndex uint        `json:"transactionIndex"`
 }
 
+type ReturnLogs struct {
+	Logs []*Log `json:"logs"              gencodec:"required"`
+}
+
 type receiptMarshaling struct {
 	Type              hexutil.Uint64
 	PostState         hexutil.Bytes
