@@ -1343,9 +1343,6 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 		}
 
 		result, err := core.ApplyMessage(evm, msg, gp)
-		if err == nil {
-			state.RevertToSnapshot(rev)
-		}
 
 		if err := vmError(); err != nil {
 			results[i] = nil
@@ -1359,6 +1356,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			results[i] = nil
 			continue
 		}
+		state.RevertToSnapshot(rev)
 		results[i] = result
 	}
 
