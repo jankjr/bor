@@ -55,7 +55,7 @@ type TransactionArgs struct {
 }
 
 type CallsMany struct {
-	txes *[]TransactionArgs `json:"txes"`
+	txes []TransactionArgs `json:"txes"`
 }
 
 // from retrieves the transaction sender address.
