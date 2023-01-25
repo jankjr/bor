@@ -1017,10 +1017,6 @@ func DoCall2(ctx context.Context, b Backend, args CallsMany, blockNrOrHash rpc.B
 		if err != nil {
 			return nil, err
 		}
-		go func() {
-			<-ctx.Done()
-			evm.Cancel()
-		}()
 
 		// Execute the message.
 		gp := new(core.GasPool).AddGas(math.MaxUint64)
