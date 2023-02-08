@@ -1452,7 +1452,6 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 
 	// Execute the message.
 
-	revision := state.Snapshot()
 	var threads = runtime.NumCPU()
 	if threads > len(*args.Txes) {
 		threads = len(*args.Txes)
