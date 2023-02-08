@@ -21,8 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -1211,6 +1213,127 @@ func (s *PublicBlockChainAPI) CallGetLogs(ctx context.Context, args TransactionA
 	return out, result.Err
 }
 
+// func (s *PublicBlockChainAPI) CallOptimise(ctx context.Context, args Optimise, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (*FanOutResp, error) {
+// }
+
+// func (s *PublicBlockChainAPI) DoCallOptimise(ctx context.Context, b Backend, args Optimise, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
+// 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
+
+// 	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+// 	if state == nil || err != nil {
+// 		return nil, err
+// 	}
+// 	if err := overrides.Apply(state); err != nil {
+// 		return nil, err
+// 	}
+// 	// Setup context so it may be cancelled the call has completed
+// 	// or, in case of unmetered gas, setup a context with a timeout.
+// 	var cancel context.CancelFunc
+// 	if timeout > 0 {
+// 		ctx, cancel = context.WithTimeout(ctx, timeout)
+// 	} else {
+// 		ctx, cancel = context.WithCancel(ctx)
+// 	}
+// 	// Make sure the context is cancelled when the call has completed
+// 	// this makes sure resources are cleaned up.
+// 	defer cancel()
+
+// 	// var evms []*vm.EVM = make([]*vm.EVM, len(args.txes))
+// 	var txResult *core.ExecutionResult = nil
+// 	if args.Tx != nil {
+// 		gp := new(core.GasPool).AddGas(header.GasLimit)
+// 		msg, err := args.Tx.ToMessage(uint64(*args.Tx.Gas), header.BaseFee)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		go func() {
+// 			<-ctx.Done()
+// 			evm.Cancel()
+// 		}()
+
+// 		// Execute the message.
+// 		result, err := core.ApplyMessage(evm, msg, gp)
+// 		if err := vmError(); err != nil {
+// 			return nil, err
+// 		}
+// 		txResult = result
+// 		// If the timer caused an abort, return an appropriate error message
+// 		if evm.Cancelled() {
+// 			return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
+// 		}
+// 		if err != nil {
+// 			return nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
+// 		}
+// 	}
+
+// 	TEN := big.NewInt(10)
+// 	Z := big.NewInt(0)
+// 	startAmount := args.StartAmount.ToInt()
+
+// 	amount := (*big.Int)(startAmount)
+
+// 	for i := 0; i < 10; i++ {
+// 		gp := new(core.GasPool).AddGas(header.GasLimit)
+// 		sampleArgs := []interface{}{
+// 			args.Token,
+// 			amount,
+// 			args.Path,
+// 		}
+
+// 		aa := make(abi.Arguments, 1)
+// 		sampleData, err := aa.PackValues(sampleArgs)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		sampleMsg := types.NewMessage(
+// 			*args.From,
+// 			args.To,
+// 			0,
+// 			Z,
+// 			2000000,
+// 			Z,
+// 			Z,
+// 			Z,
+// 			sampleData,
+// 			[]types.AccessTuple{},
+// 			true,
+// 		)
+
+// 		amount.Mul(amount, TEN)
+// 		evm, vmError, err := b.GetEVM(ctx, sampleMsg, state.Copy(), header, &vm.Config{NoBaseFee: true})
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		go func() {
+// 			<-ctx.Done()
+// 			evm.Cancel()
+// 		}()
+
+// 		// Execute the message.
+// 		result, err := core.ApplyMessage(evm, sampleMsg, gp)
+// 		if err := vmError(); err != nil {
+// 			return nil, err
+// 		}
+
+// 		// If the timer caused an abort, return an appropriate error message
+// 		if evm.Cancelled() {
+// 			return nil, fmt.Errorf("execution aborted (timeout = %v)", timeout)
+// 		}
+// 		if err != nil {
+// 			return nil, fmt.Errorf("err: %w (supplied gas %d)", err, sampleMsg.Gas())
+// 		}
+
+// 		result.Return()
+// 	}
+// }
+
 func (s *PublicBlockChainAPI) CallFanOut(ctx context.Context, args FanOut, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (*FanOutResp, error) {
 	depResults, results, err := DoFanOut(ctx, s.b, args, blockNrOrHash, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
 	if err != nil {
@@ -1295,6 +1418,7 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 
 	for i, m := range *args.DepTxes {
 		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
+		state.Prepare(m.ToTransaction().Hash(), i)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1321,41 +1445,105 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 			return nil, nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.Gas())
 		}
 		depResults[i] = result
+		if len(result.Return()) > 0 {
+			return depResults, results, nil
+		}
 	}
 
 	// Execute the message.
 
-	for i, m := range *args.Txes {
-		header.GasUsed = 0
-		gp := new(core.GasPool).AddGas(header.GasLimit)
-		msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
-		if err != nil {
-			results[i] = nil
-			continue
-		}
-		ourState := state.Copy()
-		evm, vmError, err := b.GetEVM(ctx, msg, ourState, header, &vm.Config{NoBaseFee: true})
-		if err != nil {
-			results[i] = nil
-			continue
-		}
-
-		result, err := core.ApplyMessage(evm, msg, gp)
-
-		if err := vmError(); err != nil {
-			results[i] = nil
-			continue
-		}
-		if evm.Cancelled() {
-			results[i] = nil
-			continue
-		}
-		if err != nil {
-			results[i] = nil
-			continue
-		}
-		results[i] = result
+	revision := state.Snapshot()
+	var threads = runtime.NumCPU()
+	if threads > len(*args.Txes) {
+		threads = len(*args.Txes)
 	}
+	type AJob struct {
+		m TransactionArgs
+		i int
+	}
+	var pend = new(sync.WaitGroup)
+	var jobs = make(chan *AJob, len(*args.Txes))
+	for th := 0; th < threads; th++ {
+		pend.Add(1)
+		go func() {
+			defer pend.Done()
+
+			for m := range jobs {
+				var i = m.i
+				var m = m.m
+
+				gp := new(core.GasPool).AddGas(header.GasLimit)
+				msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
+				if err != nil {
+					results[i] = nil
+					continue
+				}
+
+				header.GasUsed = 0
+				evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+				if err != nil {
+					results[i] = nil
+					continue
+				}
+
+				result, err := core.ApplyMessage(evm, msg, gp)
+				state.RevertToSnapshotDontRevert(revision)
+
+				if err := vmError(); err != nil {
+					results[i] = nil
+					continue
+				}
+				if evm.Cancelled() {
+					results[i] = nil
+					continue
+				}
+
+				if err != nil {
+					results[i] = nil
+					continue
+				}
+				results[i] = result
+			}
+		}()
+
+	}
+
+	for i, m := range *args.Txes {
+		jobs <- &AJob{m: m, i: i}
+		// header.GasUsed = 0
+		// gp := new(core.GasPool).AddGas(header.GasLimit)
+		// msg, err := m.ToMessage(gp.Gas()/2, header.BaseFee)
+		// if err != nil {
+		// 	results[i] = nil
+		// 	continue
+		// }
+
+		// evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+		// if err != nil {
+		// 	results[i] = nil
+		// 	continue
+		// }
+
+		// result, err := core.ApplyMessage(evm, msg, gp)
+		// state.RevertToSnapshotDontRevert(revision)
+
+		// if err := vmError(); err != nil {
+		// 	results[i] = nil
+		// 	continue
+		// }
+		// if evm.Cancelled() {
+		// 	results[i] = nil
+		// 	continue
+		// }
+
+		// if err != nil {
+		// 	results[i] = nil
+		// 	continue
+		// }
+		// results[i] = result
+	}
+	close(jobs)
+	pend.Wait()
 
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)

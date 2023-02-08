@@ -65,6 +65,15 @@ type FanOut struct {
 	Txes    *TransactionArgsArr `json:"txes"`
 }
 
+type Optimise struct {
+	Tx          *TransactionArgs `json:"backrun"`
+	To          *common.Address  `json:"to"`
+	From        *common.Address  `json:"from"`
+	StartAmount *hexutil.Big     `json:"value"`
+	Token       *common.Address  `json:"token"`
+	Path        *hexutil.Bytes   `json:"path"`
+}
+
 type FanoutResult struct {
 	Success bool   `json:"success"`
 	Out     string `json:"out"`
