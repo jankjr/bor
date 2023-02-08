@@ -1418,7 +1418,6 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 
 	for i, m := range *args.DepTxes {
 		msg, err := m.ToMessage(globalGasCap, header.BaseFee)
-		state.Prepare(m.ToTransaction().Hash(), i)
 		if err != nil {
 			return nil, nil, err
 		}
