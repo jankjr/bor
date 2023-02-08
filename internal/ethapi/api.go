@@ -1480,14 +1480,13 @@ func DoFanOut(ctx context.Context, b Backend, args FanOut, blockNrOrHash rpc.Blo
 				}
 
 				header.GasUsed = 0
-				evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+				evm, vmError, err := b.GetEVM(ctx, msg, state.Copy(), header, &vm.Config{NoBaseFee: true})
 				if err != nil {
 					results[i] = nil
 					continue
 				}
 
 				result, err := core.ApplyMessage(evm, msg, gp)
-				state.RevertToSnapshotDontRevert(revision)
 
 				if err := vmError(); err != nil {
 					results[i] = nil
